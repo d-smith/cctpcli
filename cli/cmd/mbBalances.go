@@ -1,11 +1,10 @@
 package cmd
 
 import (
+	"cctpcli/internal/apiclient"
 	"cctpcli/internal/eth"
-	"encoding/json"
 	"fmt"
 	"log"
-	"net/http"
 
 	"github.com/spf13/cobra"
 )
@@ -18,8 +17,6 @@ var mbBalancesCmd = &cobra.Command{
 	Args:  cobra.MinimumNArgs(1),
 	Run:   getMBBalancesCmd,
 }
-
-const MoonbeamDomain = 2
 
 func init() {
 	rootCmd.AddCommand(mbBalancesCmd)
@@ -50,7 +47,7 @@ func getMBBalances(address string) {
 
 	fmt.Printf("Fiddy Balance: %s\n", fiddyBal.String())
 
-	claims, err := getClaims(address)
+	claims, err := apiclient.GetClaims(address)
 	if err != nil {
 		log.Fatal(err)
 		return
@@ -67,45 +64,5 @@ func getMBBalances(address string) {
 			fmt.Printf("  Claim id %d :: Source domain %d -> Destination domain %d, Claimable Amount %d\n", claim.Id, claim.SourceDomain, claim.DestDomain, claim.Amount)
 		}
 	}
-
-}
-
-type Receipt struct {
-	Id           int    `json:"id"`
-	Spent        bool   `json:"spent"`
-	Nonce        uint64 `json:"nonce"`
-	Sender       string `json:"sender"`
-	Recipient    string `json:"recipient"`
-	SourceDomain uint32 `json:"sourceDomain"`
-	DestDomain   uint32 `json:"destDomain"`
-	Amount       uint64 `json:"amount"`
-	Message      string `json:"message"`
-	Signature    string `json:"signature"`
-}
-
-func getClaims(address string) ([]Receipt, error) {
-
-	var receipts []Receipt
-	url := fmt.Sprintf("http://localhost:3010/api/v1/attestor/receipts/%d/%s", MoonbeamDomain, address)
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return receipts, err
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return receipts, err
-	}
-
-	if resp.StatusCode != 200 {
-		return receipts, fmt.Errorf("error obtaining claims for address")
-	}
-
-	err = json.NewDecoder(resp.Body).Decode(&receipts)
-	if err != nil {
-		return receipts, err
-	}
-
-	return receipts, nil
 
 }

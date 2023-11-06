@@ -2,10 +2,9 @@ package cmd
 
 import (
 	"fmt"
-	"io"
-	"net/http"
 	"strconv"
 
+	"cctpcli/internal/apiclient"
 	"cctpcli/internal/eth"
 
 	"github.com/spf13/cobra"
@@ -35,7 +34,7 @@ func mintFromBurnedCmd(cmd *cobra.Command, args []string) {
 func mintFromBurned(receiverAddress, receiverKey, claimId string) {
 	moonbeamContext := eth.NewMBEthereumContext()
 
-	claims, err := getClaims(receiverAddress)
+	claims, err := apiclient.GetClaims(receiverAddress)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -67,7 +66,7 @@ func mintFromBurned(receiverAddress, receiverKey, claimId string) {
 
 	claim := claims[idx]
 
-	signature, err := retrieveAttestation(claim.Id)
+	signature, err := apiclient.RetrieveAttestation(claim.Id)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -83,54 +82,11 @@ func mintFromBurned(receiverAddress, receiverKey, claimId string) {
 
 	fmt.Printf("Minted: txn hash %s\n", txnid)
 
-	err = setClaimAsSpent(claim.Id)
+	err = apiclient.SetClaimAsSpent(claim.Id)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
 	fmt.Println("Claim marked as spent")
-}
-
-func retrieveAttestation(claimId int) (string, error) {
-	url := fmt.Sprintf("http://localhost:3010/api/v1/attestor/attesations/%d", claimId)
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return "", err
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-
-	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("error retrieving attestation")
-	}
-
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	return string(b), nil
-}
-
-func setClaimAsSpent(claimId int) error {
-	url := fmt.Sprintf("http://localhost:3010/api/v1/attestor/receipts/setspent/%d", claimId)
-	req, err := http.NewRequest(http.MethodPut, url, nil)
-	if err != nil {
-		return err
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("error updating claim status")
-	}
-
-	return nil
 }
