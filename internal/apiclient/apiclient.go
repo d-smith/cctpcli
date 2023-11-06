@@ -1,6 +1,7 @@
 package apiclient
 
 import (
+	"bytes"
 	. "cctpcli/internal/types"
 	"encoding/json"
 	"fmt"
@@ -82,6 +83,28 @@ func SetClaimAsSpent(claimId int) error {
 
 	if resp.StatusCode != 200 {
 		return fmt.Errorf("error updating claim status")
+	}
+
+	return nil
+}
+
+func PostMessageBytesToAttestor(messageBytes []byte, txnHash string) error {
+	url := fmt.Sprintf("http://%s:%d/api/v1/attestor/attest/%s", apiHost, apiPort, txnHash)
+	fmt.Println("Posting to", url)
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(messageBytes))
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Content-Type", "application/octet-stream")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("Error storing attestation")
 	}
 
 	return nil
