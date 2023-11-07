@@ -17,11 +17,11 @@ func init() {
 	apiPort = 3010
 }
 
-func GetClaims(address string) ([]Receipt, error) {
+func GetClaims(address string, destinationDomain int) ([]Receipt, error) {
 
 	var receipts []Receipt
 	url := fmt.Sprintf("http://%s:%d/api/v1/attestor/receipts/%d/%s",
-		apiHost, apiPort, MoonbeamDomain, address)
+		apiHost, apiPort, destinationDomain, address)
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return receipts, err

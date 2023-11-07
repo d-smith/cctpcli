@@ -15,6 +15,7 @@ type Receipt struct {
 	TxnId        string `json:"txnid"`
 }
 
+const EthereumDomain = 1
 const MoonbeamDomain = 2
 
 type MessageSent struct {

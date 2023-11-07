@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"cctpcli/internal/apiclient"
 	"cctpcli/internal/eth"
+	"cctpcli/internal/types"
 	"fmt"
 	"log"
 
@@ -45,5 +47,23 @@ func getBalances(address string) {
 	}
 
 	fmt.Printf("Fiddy Balance: %s\n", fiddyBal.String())
+
+	claims, err := apiclient.GetClaims(address, types.EthereumDomain)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	if len(claims) == 0 {
+		fmt.Println("No claims found for address")
+		return
+	}
+
+	fmt.Printf("Claims:\n")
+	for _, claim := range claims {
+		if claim.Spent == false {
+			fmt.Printf("  Claim id %d :: Source domain %d -> Destination domain %d, Claimable Amount %d\n", claim.Id, claim.SourceDomain, claim.DestDomain, claim.Amount)
+		}
+	}
 
 }

@@ -3,6 +3,7 @@ package cmd
 import (
 	"cctpcli/internal/apiclient"
 	"cctpcli/internal/eth"
+	"cctpcli/internal/types"
 	"fmt"
 	"log"
 
@@ -47,7 +48,7 @@ func getMBBalances(address string) {
 
 	fmt.Printf("Fiddy Balance: %s\n", fiddyBal.String())
 
-	claims, err := apiclient.GetClaims(address)
+	claims, err := apiclient.GetClaims(address, types.MoonbeamDomain)
 	if err != nil {
 		log.Fatal(err)
 		return

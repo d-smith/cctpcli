@@ -26,23 +26,49 @@ import (
 	"github.com/urfave/negroni"
 )
 
-var attestorPrivateKey *ecdsa.PrivateKey
+var ethAttestorPrivateKey *ecdsa.PrivateKey
+var mbAttestorPrivateKey *ecdsa.PrivateKey
 var db *sql.DB
 var confirmsForAttesation int
-var client *ethclient.Client
+var ethClient *ethclient.Client
+var mbClient *ethclient.Client
 
-func init() {
-	ethNodeURL := os.Getenv("ETH_URL")
+func initClient(envVar string) *ethclient.Client {
+	ethNodeURL := os.Getenv(envVar)
 	if ethNodeURL == "" {
-		log.Fatal("ETH_NODE_URL not set")
+		log.Fatal(fmt.Sprintf("%s not set", envVar))
 	}
 
-	clientInit, err := ethclient.Dial(ethNodeURL)
+	client, err := ethclient.Dial(ethNodeURL)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	client = clientInit
+	return client
+}
+
+func initAttestorKey(envVar string) *ecdsa.PrivateKey {
+	privateKeyFromEnv := os.Getenv(envVar)
+	if privateKeyFromEnv == "" {
+		log.Fatal(fmt.Sprintf("%s not set", envVar))
+	}
+
+	if privateKeyFromEnv[:2] == "0x" {
+		privateKeyFromEnv = privateKeyFromEnv[2:]
+	}
+
+	attestorPrivateKey, err := crypto.HexToECDSA(privateKeyFromEnv)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return attestorPrivateKey
+}
+
+func init() {
+
+	ethClient = initClient("ETH_URL")
+	mbClient = initClient("MOONBEAM_URL")
 
 	confirmsFromEnv := os.Getenv("ETH_ATTESTOR_CONFIRMS")
 	if confirmsFromEnv == "" {
@@ -56,19 +82,8 @@ func init() {
 
 	confirmsForAttesation = int(confirms)
 
-	privateKeyFromEnv := os.Getenv("ETH_ATTESTOR_KEY")
-	if privateKeyFromEnv == "" {
-		log.Fatal("ETH_ATTESTOR_KEY not set")
-	}
-
-	if privateKeyFromEnv[:2] == "0x" {
-		privateKeyFromEnv = privateKeyFromEnv[2:]
-	}
-
-	attestorPrivateKey, err = crypto.HexToECDSA(privateKeyFromEnv)
-	if err != nil {
-		log.Fatal(err)
-	}
+	ethAttestorPrivateKey = initAttestorKey("ETH_ATTESTOR_PRIVATE_KEY")
+	mbAttestorPrivateKey = initAttestorKey("MOONBEAM_ATTESTOR_PRIVATE_KEY")
 
 	log.Println("Initializing DB...")
 	v, _, _ := sqlite3.Version()
@@ -77,6 +92,16 @@ func init() {
 	db, err = sql.Open("sqlite3", "attestor.db")
 	if err != nil {
 		log.Fatal(err)
+	}
+}
+
+func clientFromDomain(domain int) (*ethclient.Client, error) {
+	if domain == EthereumDomain {
+		return ethClient, nil
+	} else if domain == MoonbeamDomain {
+		return mbClient, nil
+	} else {
+		return nil, fmt.Errorf("invalid domain")
 	}
 }
 
@@ -100,8 +125,13 @@ func main() {
 	}
 }
 
-func isConfirmed(txnHash string) (bool, error) {
+func isConfirmed(txnHash string, domain int) (bool, error) {
 	fmt.Printf("Checking if %s is confirmed\n", txnHash)
+	client, err := clientFromDomain(domain)
+	if err != nil {
+		return false, err
+	}
+
 	receipt, err := client.TransactionReceipt(context.Background(), common.HexToHash(txnHash))
 	if err != nil {
 		return false, err
@@ -120,21 +150,33 @@ func isConfirmed(txnHash string) (bool, error) {
 	return (currentBlockNo - txnBlockNo) >= uint64(confirmsForAttesation), nil
 }
 
+func attestorKeyForDomain(domain int) (*ecdsa.PrivateKey, error) {
+	switch domain {
+	case EthereumDomain:
+		return ethAttestorPrivateKey, nil
+	case MoonbeamDomain:
+		return mbAttestorPrivateKey, nil
+	default:
+		return nil, fmt.Errorf("invalid domain")
+	}
+}
+
 func getAttestation(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
 
 	var message string
 	var txnid string
-	row := db.QueryRow("SELECT message, txnid FROM attestations WHERE id = ?", id)
-	err := row.Scan(&message, &txnid)
+	var sourceDomain int
+	row := db.QueryRow("SELECT message, txnid, source_domain FROM attestations WHERE id = ?", id)
+	err := row.Scan(&message, &txnid, &sourceDomain)
 	if err != nil {
 		log.Println(err)
 		http.Error(w, err.Error(), 500)
 		return
 	}
 
-	confirmed, err := isConfirmed(txnid)
+	confirmed, err := isConfirmed(txnid, sourceDomain)
 	if err != nil {
 		log.Println(err)
 		http.Error(w, err.Error(), 500)
@@ -153,7 +195,14 @@ func getAttestation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	signature, err := signMessage(messageBytes)
+	attestorKey, err := attestorKeyForDomain(sourceDomain)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
+	signature, err := signMessage(messageBytes, attestorKey)
 	if err != nil {
 		log.Println(err)
 		http.Error(w, err.Error(), 500)
@@ -196,14 +245,6 @@ func storeAttestation(w http.ResponseWriter, r *http.Request) {
 
 	printMessage(parsedMessage)
 
-	/*
-		signature, err := signMessage(message)
-		if err != nil {
-			log.Println(err)
-			http.Error(w, err.Error(), 500)
-			return
-		}
-	*/
 	res, err := db.Exec("INSERT INTO attestations (nonce, sender, receiver, source_domain, dest_domain, amount, message, txnid)	 VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 		parsedMessage.Nonce, parsedMessage.Sender, parsedMessage.Recipient,
 		parsedMessage.LocalDomain, parsedMessage.RemoteDomain,
@@ -223,10 +264,10 @@ func storeAttestation(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func signMessage(message []byte) ([]byte, error) {
+func signMessage(message []byte, attestorKey *ecdsa.PrivateKey) ([]byte, error) {
 	msgHash := crypto.Keccak256Hash(message)
 	stamp := []byte("\x19Ethereum Signed Message:\n32")
-	signature, err := crypto.Sign(crypto.Keccak256Hash(stamp, msgHash.Bytes()).Bytes(), attestorPrivateKey)
+	signature, err := crypto.Sign(crypto.Keccak256Hash(stamp, msgHash.Bytes()).Bytes(), attestorKey)
 	if err != nil {
 		return nil, err
 	}
@@ -382,6 +423,8 @@ func listReceipts(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "destDomain and recipient must be specified", 400)
 		return
 	}
+
+	log.Printf("Listing receipts for destDomain %s and recipient %s\n", destDomain, recipient)
 
 	ddVal, err := strconv.ParseUint(destDomain, 10, 32)
 	if err != nil {

@@ -1,41 +1,42 @@
+/*
+Copyright © 2023 NAME HERE <EMAIL ADDRESS>
+*/
 package cmd
 
 import (
-	"fmt"
-	"strconv"
-
 	"cctpcli/internal/apiclient"
 	"cctpcli/internal/eth"
 	"cctpcli/internal/types"
+	"fmt"
+	"strconv"
 
 	"github.com/spf13/cobra"
 )
 
-// mbMintFromBurnedCmd represents the mbMintFromBurned command
-var mbMintFromBurnedCmd = &cobra.Command{
-	Use:   "mbMintFromBurned [receiver address] [receiver key] [claim id]",
-	Short: "Mint Fiddy on moonbeam from Fiddy burned on Eth",
-	Long:  `Mint Fiddy on moonbeam from Fiddy burned on Eth. This is the amount of Fiddy that the Transporter contract is allowed to burn on behalf of the address.`,
+// ethMintFromBurnedCmd represents the ethMintFromBurned command
+var ethMintFromBurnedCmd = &cobra.Command{
+	Use:   "ethMintFromBurned [receiver address] [receiver key] [claim id]",
+	Short: "Mint Fiddy on Ethereum from Fiddy burnt on Moonbeam",
+	Long:  `Mint Fiddy on Ethereum from Fiddy burnt on Moonbeam`,
 	Args:  cobra.MinimumNArgs(3),
-	Run:   mintFromBurnedCmd,
+	Run:   runEthMintFromBurnedCmd,
 }
 
 func init() {
-	rootCmd.AddCommand(mbMintFromBurnedCmd)
+	rootCmd.AddCommand(ethMintFromBurnedCmd)
 }
 
-func mintFromBurnedCmd(cmd *cobra.Command, args []string) {
+func runEthMintFromBurnedCmd(cmd *cobra.Command, args []string) {
 	if len(args) != 3 {
-		fmt.Println("mbMintFromBurned requires exactly 3 arguments")
+		fmt.Println("ethMintFromBurned requires exactly 3 arguments")
 		return
 	}
-	mintFromBurned(args[0], args[1], args[2])
+	ethMintFromBurned(args[0], args[1], args[2])
 }
 
-func mintFromBurned(receiverAddress, receiverKey, claimId string) {
-	moonbeamContext := eth.NewMBEthereumContext()
-
-	claims, err := apiclient.GetClaims(receiverAddress, types.MoonbeamDomain)
+func ethMintFromBurned(receiverAddress, receiverKey, claimId string) {
+	ethContext := eth.NewEthereumContext()
+	claims, err := apiclient.GetClaims(receiverAddress, types.EthereumDomain)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -75,7 +76,7 @@ func mintFromBurned(receiverAddress, receiverKey, claimId string) {
 
 	fmt.Println("Signature: ", signature)
 
-	txnid, err := moonbeamContext.MintFromBurned(receiverKey, claim.Message, signature)
+	txnid, err := ethContext.MintFromBurned(receiverKey, claim.Message, signature)
 	if err != nil {
 		fmt.Println(err)
 		return
