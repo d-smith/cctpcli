@@ -29,7 +29,7 @@ func getMBAllowanceCmd(cmd *cobra.Command, args []string) {
 		fmt.Println("mbAllowance requires exactly one argument")
 		return
 	}
-	getAllowance(args[0])
+	getMBAllowance(args[0])
 }
 
 func getMBAllowance(address string) {
