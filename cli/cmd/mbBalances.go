@@ -39,7 +39,8 @@ func getMBBalances(address string) {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("ETH Balance: %s\n", bal.String())
+	eb := balanceInEth(bal)
+	fmt.Printf("ETH Balance: %s\n", eb.String())
 
 	fiddyBal, err := ethContext.GetFiddyBalance(address)
 	if err != nil {

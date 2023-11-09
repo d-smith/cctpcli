@@ -6,6 +6,8 @@ import (
 	"cctpcli/internal/types"
 	"fmt"
 	"log"
+	"math"
+	"math/big"
 
 	"github.com/spf13/cobra"
 )
@@ -31,6 +33,12 @@ func getBalancesCmd(cmd *cobra.Command, args []string) {
 	getBalances(args[0])
 }
 
+func balanceInEth(weiBalance *big.Int) *big.Float {
+	fbalance := new(big.Float)
+	fbalance.SetString(weiBalance.String())
+	return new(big.Float).Quo(fbalance, big.NewFloat(math.Pow10(18)))
+}
+
 func getBalances(address string) {
 	ethContext := eth.NewEthereumContext()
 
@@ -39,7 +47,8 @@ func getBalances(address string) {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("ETH Balance: %s\n", bal.String())
+	eb := balanceInEth(bal)
+	fmt.Printf("ETH Balance: %s\n", eb.String())
 
 	fiddyBal, err := ethContext.GetFiddyBalance(address)
 	if err != nil {
